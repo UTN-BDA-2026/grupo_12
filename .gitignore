@@ -1,0 +1,11 @@
+# Entornos virtuales de Python
+venv/
+__pycache__/
+
+# Dependencias de Node/React
+node_modules/
+dist/
+
+# Variables de entorno y archivos de Mac
+.env
+.DS_Store
