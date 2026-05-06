@@ -44,3 +44,4 @@ Sigue estos pasos para ejecutar el proyecto en tu máquina:
   ```bash
   cd frontend
   npm run dev
+  ```
