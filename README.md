@@ -26,13 +26,19 @@ Sigue estos pasos para ejecutar el proyecto en tu máquina:
 ### 1. Preparación de la Base de Datos
 * Asegúrate de tener el servicio de PostgreSQL corriendo localmente.
 * La base de datos no requiere contraseña en el entorno de desarrollo actual.
+* Ejecuta el script para popular la base con datos de prueba:
+  ```bash
+  source venv/bin/activate
+  python generador.py
 
 ### 2. Levantar el backend (fastAPI)
-Abre una terminal en la raíz del proyecto (carpeta inventario-hardware), activa el entorno virtual y arranca el servidor con recarga automática:
-source venv/bin/activate
-uvicorn main:app --reload
+* Abre una terminal en la raíz del proyecto (carpeta inventario-hardware), activa el entorno virtual y arranca el servidor con recarga automática:
+  ```bash
+  source venv/bin/activate
+  uvicorn main:app --reload
 
 ### 3. Levantar el frontend (react)
-Abre una segunda terminal, ingresa a la carpeta del frontend y levanta el servidor de desarrollo:
-cd frontend
-npm run dev
+* Abre una segunda terminal, ingresa a la carpeta del frontend y levanta el servidor de desarrollo:
+  ```bash
+  cd frontend
+  npm run dev
