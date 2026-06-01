@@ -1,8 +1,9 @@
 from typing import List
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session  
 from app import models, schemas
 from app.database import engine, get_db
+from sqlalchemy import text
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -87,15 +88,63 @@ def obtener_medicos(db: Session = Depends(get_db)):
     return db.query(models.Medico).all()
 
 # --- RUTAS DE TURNOS ---
-@app.post("/turnos/", response_model=schemas.Turno)
-def crear_turno(turno: schemas.TurnoCreate, db: Session = Depends(get_db)):
-    nuevo_turno = models.Turno(
-        fecha=turno.fecha,
-        medico_id=turno.medico_id,
-        paciente_id=turno.paciente_id,
-        motivo=turno.motivo
-    )
-    db.add(nuevo_turno)
-    db.commit()
-    db.refresh(nuevo_turno)
-    return nuevo_turno
+@app.post("/turnos/", response_model=schemas.Turno, status_code=status.HTTP_201_CREATED)
+def crear_turno_seguro(turno: schemas.TurnoCreate, db: Session = Depends(get_db)):
+
+    # Registra un turno medico de forma transaccional segura, previniendo double-booking mediante bloqueos pesimistas.
+    try:
+        # 1. INICIO DE LA VERIFICACION DE LOCK (with_for_update)
+        # Buscamos si ya existe un turno para ese medico en esa fecha/hora exacta.
+        # .with_for_update() bloquea la fila en la base de datos hasta el commit/rollback.
+        turno_existente = db.query(models.Turno)\
+            .filter(
+                models.Turno.medico_id == turno.medico_id,
+                models.Turno.fecha == turno.fecha
+            )\
+            .with_for_update().first()
+        
+        if turno_existente:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El médico ya tiene un turno registrado para esa fecha y hora seleccionada."
+            )
+        
+        # Verificamos que el paciente no tenga otro turno para esa fecha/hora (opcional, dependiendo de las reglas del negocio)
+        paciente_ocupado = db.query(models.Turno)\
+            .filter(
+                models.Turno.paciente_id == turno.paciente_id,
+                models.Turno.fecha == turno.fecha
+            ).first()
+        if paciente_ocupado:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El paciente ya tiene un turno registrado para esa fecha y hora seleccionada."
+            )
+        
+        # 2. Creacion del registro
+        nuevo_turno = models.Turno(
+            fecha=turno.fecha,
+            medico_id=turno.medico_id,
+            paciente_id=turno.paciente_id,
+            motivo=turno.motivo
+        )
+        
+        db.add(nuevo_turno)
+
+        # 3. COMMIT ATOMICO
+        # Al hacer commit, se guardan los datos en la particion correspondiente y se liberan los locks.
+        db.commit()
+        db.refresh(nuevo_turno)
+        return nuevo_turno
+
+    except HTTPException as http_ex:
+        # Si es un error controlado por nosotros, relanzamos la excepcion
+        raise http_ex
+    except Exception as e:
+        # Si ocurre un error inesperado de base de datos (ej: caida de conexion)
+        # Aseguramos el rollback inmediato para liberar cualquier lock y no dejar datos corruptos.
+        db.rollback()  # En caso de error, revertimos cualquier cambio
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Error transaccional al reservar el turno: {str(e)}"
+        )
