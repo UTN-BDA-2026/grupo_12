@@ -1,8 +1,10 @@
 import random
 import unicodedata
+import os
 from faker import Faker
 from app.database import engine, SessionLocal
 from app import models
+from sqlalchemy import text
 
 # Inicializamos Faker con localizacion argentina para mayor realismo
 fake = Faker('es_AR')
@@ -11,6 +13,20 @@ def restaurar_base_de_datos():
     models.Base.metadata.drop_all(bind=engine)
     print("Creando las tablas nuevamente desde cero...")
     models.Base.metadata.create_all(bind=engine)
+
+    # --- Ejecutar script de particiones ---
+    print("Construyendo las particiones para la tabla de turnos...")
+
+    # 1. Encontrar la ruta absoluta al script sql
+    script_path = os.path.join(os.path.dirname(__file__), 'sql', '01_init_particiones_turnos.sql')
+
+    # 2. Leer y ejecutar el sql directamente en la base de datos
+    with engine.connect() as connection:
+        with open(script_path, 'r') as file:            
+            query_sql = file.read()
+            connection.execute(text(query_sql))
+            connection.commit()
+    print("✅ Particiones mensuales creadas exitosamente.")
     db = SessionLocal()
 
     try:
@@ -42,7 +58,7 @@ def restaurar_base_de_datos():
         # Generamos 10.000 DNIS unicos y garantizados antes del bucle
         dnis_unicos = random.sample(range(10000000, 47000000), 10000)
 
-        for _ in range(10000):
+        for i in range(10000):
             # Guardamos los nombres generados
             nombre_generado = fake.first_name()
             apellido_generado = fake.last_name()
@@ -55,7 +71,7 @@ def restaurar_base_de_datos():
             email_personalizado = f"{nombre_limpio}.{apellido_limpio}{random.randint(10, 999)}@example.com"
 
             # Sacamos un DNI de nuestra lista de numeros unicos usando el indice del bucle
-            dni_realista = str(dnis_unicos[_])
+            dni_realista = str(dnis_unicos[i])
 
             paciente = models.Paciente(
                 nombre=nombre_generado,
