@@ -37,8 +37,12 @@ def restaurar_base_de_datos():
         db.commit()
 
         # 3. Crear pacientes
-        print("Recibiendo 100 pacientes en la sala de espera...")
-        for _ in range(100):
+        print("Recibiendo 10.000 pacientes en la sala de espera...")
+
+        # Generamos 10.000 DNIS unicos y garantizados antes del bucle
+        dnis_unicos = random.sample(range(10000000, 47000000), 10000)
+
+        for _ in range(10000):
             # Guardamos los nombres generados
             nombre_generado = fake.first_name()
             apellido_generado = fake.last_name()
@@ -48,10 +52,10 @@ def restaurar_base_de_datos():
             apellido_limpio = ''.join(c for c in unicodedata.normalize('NFD', apellido_generado) if unicodedata.category(c) != 'Mn').replace(' ', '').lower()
 
             # Armamos el email personalizado agregando un numero random para evitar duplicados
-            email_personalizado = f"{nombre_limpio}.{apellido_limpio}{random.randint(10, 99)}@example.com"
+            email_personalizado = f"{nombre_limpio}.{apellido_limpio}{random.randint(10, 999)}@example.com"
 
-            # Generamos un DNI realista para Argentina
-            dni_realista = str(random.randint(10000000, 47000000))
+            # Sacamos un DNI de nuestra lista de numeros unicos usando el indice del bucle
+            dni_realista = str(dnis_unicos[_])
 
             paciente = models.Paciente(
                 nombre=nombre_generado,
