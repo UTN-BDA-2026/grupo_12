@@ -40,6 +40,13 @@ def crear_paciente(paciente: schemas.PacienteCreate, db: Session = Depends(get_d
 def obtener_pacientes(db: Session = Depends(get_db)):
     return db.query(models.Paciente).all()
 
+@app.get("/pacientes/buscar/{dni}", response_model=schemas.Paciente)
+def buscar_paciente_por_dni(dni: str, db: Session = Depends(get_db)):
+    paciente = db.query(models.Paciente).filter(models.Paciente.dni == dni).first()
+    if not paciente:
+        raise HTTPException(status_code=404, detail="No se encontró ningún paciente con ese DNI")
+    return paciente
+
 # --- RUTAS DE ESPECIALIDADES ---
 @app.post("/especialidades/", response_model=schemas.Especialidad)
 def crear_especialidad(especialidad: schemas.EspecialidadCreate, db: Session = Depends(get_db)):
