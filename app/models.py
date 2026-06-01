@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -36,3 +36,23 @@ class Paciente(Base):
     dni = Column(String, unique=True, index=True, nullable=False)
     email = Column(String)
     telefono = Column(String)
+
+class Turno(Base):
+    __tablename__ = "turnos"
+
+    # Le indicamos a PostgreSQL que particione esta tabla por rangos de fecha
+    table_args = (
+        {"postgresql_partition_by": "RANGE (fecha)"},
+    )
+
+    # En tablas particionadas por rango, la columna de particion DEBE ser parte de la clave primaria
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fecha = Column(DateTime, primary_key=True)
+
+    medico_id = Column(Integer, ForeignKey("medicos.id"))
+    paciente_id = Column(Integer, ForeignKey("pacientes.id"))
+    motivo = Column(String)
+
+    # Relaciones para acceder a los datos cruzados facilmente
+    medico = relationship("Medico")
+    paciente = relationship("Paciente")

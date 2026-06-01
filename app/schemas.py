@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -44,5 +45,21 @@ class MedicoCreate(MedicoBase):
 
 class Medico(MedicoBase):
     id: int
+    class Config:
+        from_attributes = True
+
+# --- ESQUEMAS DE TURNOS ---
+class TurnoBase(BaseModel):
+    fecha: datetime
+    medico_id: int
+    paciente_id: int
+    motivo: str
+
+class TurnoCreate(TurnoBase):
+    pass
+
+class Turno(TurnoBase):
+    id: int 
+
     class Config:
         from_attributes = True
