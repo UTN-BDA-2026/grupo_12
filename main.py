@@ -85,3 +85,17 @@ def crear_medico(medico: schemas.MedicoCreate, db: Session = Depends(get_db)):
 @app.get("/medicos/", response_model=List[schemas.Medico])
 def obtener_medicos(db: Session = Depends(get_db)):
     return db.query(models.Medico).all()
+
+# --- RUTAS DE TURNOS ---
+@app.post("/turnos/", response_model=schemas.Turno)
+def crear_turno(turno: schemas.TurnoCreate, db: Session = Depends(get_db)):
+    nuevo_turno = models.Turno(
+        fecha=turno.fecha,
+        medico_id=turno.medico_id,
+        paciente_id=turno.paciente_id,
+        motivo=turno.motivo
+    )
+    db.add(nuevo_turno)
+    db.commit()
+    db.refresh(nuevo_turno)
+    return nuevo_turno
