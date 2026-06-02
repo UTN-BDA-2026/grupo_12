@@ -162,3 +162,31 @@ def crear_historia_clinica(historia: schemas.HistoriaClinicaCreate, db: Session 
     db.commit()
     db.refresh(nueva_historia)
     return nueva_historia
+
+# --- RUTA DE REPORTE DE ESTADISTICAS ---
+@app.get("/estadisticas/turnos-por-medico", tags=["Administracion"])
+def obtener_estadisticas_turnos(db: Session = Depends(get_db)):
+    # Endpoint analitico para uso administrativo. Ejecuta una consulta sql nativa saltandose el orm para optimizar el rendimiento al calcular estadisticas masivas.
+    # Escribimos la consulta sql pura
+    # Usamos left join para que tambien aparezcan los medicos que tienen 0 turnos.
+    consulta_sql = """
+        SELECT
+            m.matricula,
+            m.nombre,
+            m.apellido,
+            COUNT(t.id) AS cantidad_turnos
+        FROM medicos m
+        LEFT JOIN turnos t ON m.id = t.medico_id
+        GROUP BY m.id, m.matricula, m.nombre, m.apellido
+        ORDER BY cantidad_turnos DESC;
+    """
+
+    # Ejecutamos el sql directamente contra el motor
+    # El .mappings().all() convierte el resultado crudo en diccionarios
+    resultado = db.execute(text(consulta_sql))
+    estadisticas = resultado.mappings().all()
+
+    return {
+        "mensaje": "Estadisticas calculadas via Raw SQL",
+        "data": estadisticas
+    }
