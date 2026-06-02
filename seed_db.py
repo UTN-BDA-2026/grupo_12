@@ -8,6 +8,11 @@ from sqlalchemy import text
 
 # Inicializamos Faker con localizacion argentina para mayor realismo
 fake = Faker('es_AR')
+
+# -- Nuevo: CONGELAR EL AZAR PARA QUE SEA IGUAL PARA TODOS --
+Faker.seed(1234)
+random.seed(1234)
+
 def restaurar_base_de_datos():
     print("Borrando tablas existentes para limpiar el lienzo...")
     models.Base.metadata.drop_all(bind=engine)

@@ -148,3 +148,17 @@ def crear_turno_seguro(turno: schemas.TurnoCreate, db: Session = Depends(get_db)
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Error transaccional al reservar el turno: {str(e)}"
         )
+    
+# --- RUTAS DE HISTORIAS CLINICAS ---
+@app.post("/historias_clinicas/", response_model=schemas.HistoriaClinica, status_code=status.HTTP_201_CREATED)
+def crear_historia_clinica(historia: schemas.HistoriaClinicaCreate, db: Session = Depends(get_db)):
+    # Registra una entrada en la historia clinica del paciente utilizando un campo JSONB (NoSQL) para soportar esquemas dinamicos dependiendo de la especialidad.
+    nueva_historia = models.HistoriaClinica(
+        paciente_id=historia.paciente_id,
+        medico_id=historia.medico_id,
+        datos_medicos=historia.datos_medicos
+    )
+    db.add(nueva_historia)
+    db.commit()
+    db.refresh(nueva_historia)
+    return nueva_historia

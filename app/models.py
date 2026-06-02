@@ -1,6 +1,8 @@
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from .database import Base
+from datetime import datetime, timezone
 
 class Especialidad(Base):
     __tablename__ = "especialidades"
@@ -56,3 +58,18 @@ class Turno(Base):
     # Relaciones para acceder a los datos cruzados facilmente
     medico = relationship("Medico")
     paciente = relationship("Paciente")
+
+class HistoriaClinica(Base):
+    __tablename__ = "historias_clinicas"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fecha = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    paciente_id = Column(Integer, ForeignKey("pacientes.id"))
+    medico_id = Column(Integer, ForeignKey("medicos.id"))
+
+    # Aca esta la magia NoSQL: un campo de estrutura dinamica
+    datos_medicos = Column(JSONB)
+
+    # Relaciones
+    paciente = relationship("Paciente")
+    medico = relationship("Medico")
