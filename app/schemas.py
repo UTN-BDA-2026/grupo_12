@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 
 # Esquema base con los datos que necesitamos recibir
 class PacienteBase(BaseModel):
@@ -60,6 +60,23 @@ class TurnoCreate(TurnoBase):
 
 class Turno(TurnoBase):
     id: int 
+
+    class Config:
+        from_attributes = True
+
+# --- ESQUEMAS DE HISTORIAS CLINICAS ---
+class HistoriaClinicaBase(BaseModel):
+    paciente_id: int
+    medico_id: int
+    # Acepta cualquier estructura de diccionario
+    datos_medicos: Dict[str, Any]
+
+class HistoriaClinicaCreate(HistoriaClinicaBase):
+    pass
+
+class HistoriaClinica(HistoriaClinicaBase):
+    id: int
+    fecha: datetime
 
     class Config:
         from_attributes = True
