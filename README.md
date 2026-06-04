@@ -58,21 +58,31 @@ venv\Scripts\activate
 .\venv\Scripts\Activate.ps1
 
 # Instalar las dependencias requeridas
+```
 pip install fastapi uvicorn sqlalchemy psycopg2-binary pydantic
+```
 
 # O si tienes el archivo de requerimientos:
-# pip install -r requirements.txt
+```
+pip install -r requirements.txt
+```
 
 ### 3. Poblar la base de datos
+```
 python seed_db.py
+```
 
 ### 4. Levantar el backend
+```
 uvicorn main:app --reload
+```
 
 Puedes acceder a la documentación interactiva y probar los endpoints desde el Swagger UI en: http://127.0.0.1:8000/docs
 
 ### 5. Configuración del frontend
 Abre una nueva ventana de la terminal, ubícate en la raíz del proyecto y ejecuta:
+```
 cd frontend
 npm install
 npm run dev
+```
