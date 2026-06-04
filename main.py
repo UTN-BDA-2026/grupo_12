@@ -3,12 +3,25 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session  
 from app import models, schemas
 from app.database import engine, get_db
-from sqlalchemy import text
+from sqlalchemy import text, asc
+from fastapi.middleware.cors import CORSMiddleware
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title = "Sistema de Turnos Medicos")
+
+# --- CONFIGURACION DE CORS ---
+# Esto nos permite que el front se comunique con nuestra api sin ser bloqueado.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # El puerto por defecto de Vite
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Permite todas las cabeceras
+)
+
+
 
 @app.get("/ping")
 def ping():
@@ -48,6 +61,34 @@ def buscar_paciente_por_dni(dni: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No se encontró ningún paciente con ese DNI")
     return paciente
 
+# Editar paciente
+@app.put("/pacientes/{paciente_id}", response_model=schemas.Paciente)
+def actualizar_paciente(paciente_id: int, paciente_actualizado: schemas.PacienteCreate, db: Session = Depends(get_db)):
+    db_paciente = db.query(models.Paciente).filter(models.Paciente.id == paciente_id).first()
+    if not db_paciente:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    
+    db_paciente.nombre = paciente_actualizado.nombre
+    db_paciente.apellido = paciente_actualizado.apellido
+    db_paciente.dni = paciente_actualizado.dni
+    db_paciente.email = paciente_actualizado.email
+    db_paciente.telefono = paciente_actualizado.telefono
+    
+    db.commit()
+    db.refresh(db_paciente)
+    return db_paciente
+
+# Eliminar paciente
+@app.delete("/pacientes/{paciente_id}")
+def eliminar_paciente(paciente_id: int, db: Session = Depends(get_db)):
+    db_paciente = db.query(models.Paciente).filter(models.Paciente.id == paciente_id).first()
+    if not db_paciente:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    
+    db.delete(db_paciente)
+    db.commit()
+    return {"mensaje": "Paciente eliminado correctamente"}
+
 # --- RUTAS DE ESPECIALIDADES ---
 @app.post("/especialidades/", response_model=schemas.Especialidad)
 def crear_especialidad(especialidad: schemas.EspecialidadCreate, db: Session = Depends(get_db)):
@@ -85,7 +126,46 @@ def crear_medico(medico: schemas.MedicoCreate, db: Session = Depends(get_db)):
 
 @app.get("/medicos/", response_model=List[schemas.Medico])
 def obtener_medicos(db: Session = Depends(get_db)):
-    return db.query(models.Medico).all()
+    # Modificamos la consulta para que PostgreSQL siempre ordene por ID antes de mandar los datos
+    medicos = db.query(models.Medico).order_by(asc(models.Medico.id)).all()
+    return medicos
+
+# --- EDITAR MÉDICO (PUT) ---
+@app.put("/medicos/{medico_id}", response_model=schemas.Medico)
+def actualizar_medico(medico_id: int, medico_actualizado: schemas.MedicoCreate, db: Session = Depends(get_db)):
+    # 1. Buscamos si el médico existe en la base de datos
+    db_medico = db.query(models.Medico).filter(models.Medico.id == medico_id).first()
+    
+    if not db_medico:
+        raise HTTPException(status_code=404, detail="Médico no encontrado")
+    
+    # 2. Actualizamos los datos
+    db_medico.nombre = medico_actualizado.nombre
+    db_medico.apellido = medico_actualizado.apellido
+    db_medico.matricula = medico_actualizado.matricula
+    db_medico.especialidad_id = medico_actualizado.especialidad_id
+    
+    # 3. Guardamos los cambios
+    db.commit()
+    db.refresh(db_medico)
+    
+    return db_medico
+
+
+# --- ELIMINAR MÉDICO (DELETE) ---
+@app.delete("/medicos/{medico_id}")
+def eliminar_medico(medico_id: int, db: Session = Depends(get_db)):
+    # 1. Buscamos al médico
+    db_medico = db.query(models.Medico).filter(models.Medico.id == medico_id).first()
+    
+    if not db_medico:
+        raise HTTPException(status_code=404, detail="Médico no encontrado")
+    
+    # 2. Lo eliminamos físicamente de la base de datos
+    db.delete(db_medico)
+    db.commit()
+    
+    return {"mensaje": f"Médico {db_medico.nombre} {db_medico.apellido} eliminado correctamente"}
 
 # --- RUTAS DE TURNOS ---
 @app.post("/turnos/", response_model=schemas.Turno, status_code=status.HTTP_201_CREATED)
@@ -148,6 +228,28 @@ def crear_turno_seguro(turno: schemas.TurnoCreate, db: Session = Depends(get_db)
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Error transaccional al reservar el turno: {str(e)}"
         )
+
+# Obtener los turnos
+@app.get("/turnos/", response_model=List[schemas.Turno])
+def obtener_turnos(db: Session = Depends(get_db)):
+    # Buscamos todos los turnos en la base de datos
+    turnos = db.query(models.Turno).all()
+    return turnos
+
+# Cancelar un turno
+@app.delete("/turnos/{turno_id}")
+def eliminar_turno(turno_id: int, db: Session = Depends(get_db)):
+    # 1. Buscamos el turno
+    db_turno = db.query(models.Turno).filter(models.Turno.id == turno_id).first()
+    
+    if not db_turno:
+        raise HTTPException(status_code=404, detail="Turno no encontrado")
+    
+    # 2. Lo eliminamos físicamente
+    db.delete(db_turno)
+    db.commit()
+    
+    return {"mensaje": "Turno cancelado y liberado correctamente"}
     
 # --- RUTAS DE HISTORIAS CLINICAS ---
 @app.post("/historias_clinicas/", response_model=schemas.HistoriaClinica, status_code=status.HTTP_201_CREATED)
