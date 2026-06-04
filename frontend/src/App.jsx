@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import Profesionales from "./pages/Profesionales";
 import Agenda from "./pages/Agenda";
 import Pacientes from "./pages/Pacientes";
+import HistoriasClinicas from "./pages/Historiasclinicas";
 
 function App() {
   return (
@@ -22,14 +23,7 @@ function App() {
             }
           />
           <Route path="medicos" element={<Profesionales />} />
-          <Route
-            path="historias-clinicas"
-            element={
-              <div className="p-6 text-gray-500">
-                Módulo de Historias Clínicas (JSONB) en construcción...
-              </div>
-            }
-          />
+          <Route path="historias-clinicas" element={<HistoriasClinicas />} />
         </Route>
       </Routes>
     </BrowserRouter>

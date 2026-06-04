@@ -5,6 +5,7 @@ from app import models, schemas
 from app.database import engine, get_db
 from sqlalchemy import text, asc
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -264,6 +265,43 @@ def crear_historia_clinica(historia: schemas.HistoriaClinicaCreate, db: Session 
     db.commit()
     db.refresh(nueva_historia)
     return nueva_historia
+
+# --- CREAR REGISTRO EN HISTORIA CLÍNICA (POST) ---
+@app.post("/historias-clinicas/", response_model=schemas.HistoriaClinica)
+def crear_registro_historia(registro: schemas.HistoriaClinicaCreate, db: Session = Depends(get_db)):
+    # 1. Validamos que el paciente exista
+    paciente = db.query(models.Paciente).filter(models.Paciente.id == registro.paciente_id).first()
+    if not paciente:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+        
+    # 2. Validamos que el médico exista
+    medico = db.query(models.Medico).filter(models.Medico.id == registro.medico_id).first()
+    if not medico:
+        raise HTTPException(status_code=404, detail="Médico no encontrado")
+
+    # 3. Creamos el registro con la fecha y hora actual del servidor
+    db_registro = models.HistoriaClinica(
+        paciente_id=registro.paciente_id,
+        medico_id=registro.medico_id,
+        datos_medicos=registro.datos_medicos, # SQLAlchemy mapea el Dict automáticamente a JSONB
+        fecha=datetime.now()
+    )
+    
+    db.add(db_registro)
+    db.commit()
+    db.refresh(db_registro)
+    return db_registro
+
+
+# --- OBTENER HISTORIAL DE UN PACIENTE (GET) ---
+@app.get("/historias-clinicas/paciente/{paciente_id}", response_model=List[schemas.HistoriaClinica])
+def obtener_historial_paciente(paciente_id: int, db: Session = Depends(get_db)):
+    # Buscamos todas las consultas del paciente ordenadas de la más reciente a la más antigua
+    historial = db.query(models.HistoriaClinica)\
+                  .filter(models.HistoriaClinica.paciente_id == paciente_id)\
+                  .order_by(models.HistoriaClinica.fecha.desc())\
+                  .all()
+    return historial
 
 # --- RUTA DE REPORTE DE ESTADISTICAS ---
 @app.get("/estadisticas/turnos-por-medico", tags=["Administracion"])
