@@ -1,25 +1,38 @@
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List, Any, Dict
+from decimal import Decimal
 
-# Esquema base con los datos que necesitamos recibir
+# --- ESQUEMAS DE OBRAS SOCIALES ---
+class ObraSocialBase(BaseModel):
+    nombre: str
+    cobertura_base: Decimal = Decimal('0.00')
+
+class ObraSocialCreate(ObraSocialBase):
+    pass
+
+class ObraSocial(ObraSocialBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# --- ESQUEMAS DE PACIENTES ---
 class PacienteBase(BaseModel):
     nombre: str
     apellido: str
     dni: str
     email: Optional[str] = None
     telefono: Optional[str] = None
+    obra_social_id: Optional[int] = None
+    numero_credencial: Optional[str] = None
 
-# Esquema para la creacion (Hereda del base, por ahora son identicos)
 class PacienteCreate(PacienteBase):
     pass
 
-# Esquema de respuesta (lo que el servidor devuelve despues de crearlo)
 class Paciente(PacienteBase):
-    id: int # Le sumamos el id que le asigna la base de datos
-
+    id: int 
     class Config:
-        from_attributes = True # Esto permite que pydantic lea los datos del ORM de SQLAlchemy
+        from_attributes = True
 
 # --- ESQUEMAS DE ESPECIALIDADES ---
 class EspecialidadBase(BaseModel):
@@ -54,20 +67,21 @@ class TurnoBase(BaseModel):
     medico_id: int
     paciente_id: int
     motivo: str
-    estado: str = "Pendiente"  # Nuevo campo con valor por defecto
-    notas: Optional[str] = None  # Nuevo campo opcional
+    estado: str = "Pendiente"
+    notas: Optional[str] = None
+    monto_obra_social: Decimal = Decimal('0.00')
+    monto_copago: Decimal = Decimal('0.00')
 
 class TurnoCreate(TurnoBase):
     pass
 
-# Nuevo esquema solo para actualizar estado y notas sin tocar el resto
 class TurnoUpdate(BaseModel):
     estado: Optional[str] = None
     notas: Optional[str] = None
+    monto_copago: Optional[Decimal] = None
 
 class Turno(TurnoBase):
     id: int 
-
     class Config:
         from_attributes = True
 
@@ -75,7 +89,6 @@ class Turno(TurnoBase):
 class HistoriaClinicaBase(BaseModel):
     paciente_id: int
     medico_id: int
-    # Acepta cualquier estructura de diccionario
     datos_medicos: Dict[str, Any]
 
 class HistoriaClinicaCreate(HistoriaClinicaBase):
@@ -84,6 +97,5 @@ class HistoriaClinicaCreate(HistoriaClinicaBase):
 class HistoriaClinica(HistoriaClinicaBase):
     id: int
     fecha: datetime
-
     class Config:
         from_attributes = True

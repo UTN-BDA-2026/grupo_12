@@ -1,16 +1,24 @@
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric
 from sqlalchemy.orm import relationship
 from .database import Base
 from datetime import datetime, timezone
+
+class ObraSocial(Base):
+    __tablename__ = "obras_sociales"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, unique=True, nullable=False)
+    # Usamos Numeric para manejar dinero con 2 decimales de precisión
+    cobertura_base = Column(Numeric(10, 2), default=0.00)
+
+    pacientes = relationship("Paciente", back_populates="obra_social")
 
 class Especialidad(Base):
     __tablename__ = "especialidades"
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, unique=True, nullable=False)
-
-    # Relacion para que SQLAlchemy sepa qué médicos tienen esta especialidad
     medicos = relationship("Medico", back_populates="especialidad")
 
 class Medico(Base):
@@ -20,11 +28,7 @@ class Medico(Base):
     nombre = Column(String, nullable=False)
     apellido = Column(String, nullable=False)
     matricula = Column(String, unique=True, nullable=False)
-
-    # Clave foranea que conecta con la especialidad
     especialidad_id = Column(Integer, ForeignKey("especialidades.id"))
-
-    # Relacion inversa
     especialidad = relationship("Especialidad", back_populates="medicos")
 
 class Paciente(Base):
@@ -33,33 +37,34 @@ class Paciente(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False)
     apellido = Column(String, nullable=False)
-
-    # Al poner index=True en el DNI ya estamos dejando preparado el terreno para cumplir con el requisito de Indices que se pide.
     dni = Column(String, unique=True, index=True, nullable=False)
     email = Column(String)
     telefono = Column(String)
+    
+    # --- NUEVOS CAMPOS ---
+    obra_social_id = Column(Integer, ForeignKey("obras_sociales.id"), nullable=True)
+    numero_credencial = Column(String, nullable=True)
+
+    obra_social = relationship("ObraSocial", back_populates="pacientes")
 
 class Turno(Base):
     __tablename__ = "turnos"
-
-    # Le indicamos a PostgreSQL que particione esta tabla por rangos de fecha
     table_args = (
         {"postgresql_partition_by": "RANGE (fecha)"},
     )
 
-    # En tablas particionadas por rango, la columna de particion DEBE ser parte de la clave primaria
     id = Column(Integer, primary_key=True, autoincrement=True)
     fecha = Column(DateTime, primary_key=True)
-
     medico_id = Column(Integer, ForeignKey("medicos.id"))
     paciente_id = Column(Integer, ForeignKey("pacientes.id"))
     motivo = Column(String)
-
-    # --- NUEVOS CAMPOS ---
     estado = Column(String, default="Pendiente")
     notas = Column(String, nullable=True)
+    
+    # --- NUEVOS CAMPOS FINANCIEROS ---
+    monto_obra_social = Column(Numeric(10, 2), default=0.00)
+    monto_copago = Column(Numeric(10, 2), default=0.00)
 
-    # Relaciones para acceder a los datos cruzados facilmente
     medico = relationship("Medico")
     paciente = relationship("Paciente")
 
@@ -70,10 +75,6 @@ class HistoriaClinica(Base):
     fecha = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     paciente_id = Column(Integer, ForeignKey("pacientes.id"))
     medico_id = Column(Integer, ForeignKey("medicos.id"))
-
-    # Aca esta la magia NoSQL: un campo de estrutura dinamica
     datos_medicos = Column(JSONB)
-
-    # Relaciones
     paciente = relationship("Paciente")
     medico = relationship("Medico")
