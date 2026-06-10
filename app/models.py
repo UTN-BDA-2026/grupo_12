@@ -55,6 +55,10 @@ class Turno(Base):
     paciente_id = Column(Integer, ForeignKey("pacientes.id"))
     motivo = Column(String)
 
+    # --- NUEVOS CAMPOS ---
+    estado = Column(String, default="Pendiente")
+    notas = Column(String, nullable=True)
+
     # Relaciones para acceder a los datos cruzados facilmente
     medico = relationship("Medico")
     paciente = relationship("Paciente")

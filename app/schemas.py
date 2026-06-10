@@ -54,9 +54,16 @@ class TurnoBase(BaseModel):
     medico_id: int
     paciente_id: int
     motivo: str
+    estado: str = "Pendiente"  # Nuevo campo con valor por defecto
+    notas: Optional[str] = None  # Nuevo campo opcional
 
 class TurnoCreate(TurnoBase):
     pass
+
+# Nuevo esquema solo para actualizar estado y notas sin tocar el resto
+class TurnoUpdate(BaseModel):
+    estado: Optional[str] = None
+    notas: Optional[str] = None
 
 class Turno(TurnoBase):
     id: int 
