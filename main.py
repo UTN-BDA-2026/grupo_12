@@ -251,6 +251,27 @@ def eliminar_turno(turno_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return {"mensaje": "Turno cancelado y liberado correctamente"}
+
+# --- EDITAR ESTADO Y NOTAS DEL TURNO (PUT) ---
+@app.put("/turnos/{turno_id}", response_model=schemas.Turno)
+def actualizar_turno(turno_id: int, turno_actualizado: schemas.TurnoUpdate, db: Session = Depends(get_db)):
+    # 1. Buscamos el turno en la base
+    db_turno = db.query(models.Turno).filter(models.Turno.id == turno_id).first()
+    
+    if not db_turno:
+        raise HTTPException(status_code=404, detail="Turno no encontrado")
+    
+    # 2. Actualizamos solo los datos que nos mande el frontend
+    if turno_actualizado.estado is not None:
+        db_turno.estado = turno_actualizado.estado
+    if turno_actualizado.notas is not None:
+        db_turno.notas = turno_actualizado.notas
+        
+    # 3. Guardamos los cambios
+    db.commit()
+    db.refresh(db_turno)
+    
+    return db_turno
     
 # --- RUTAS DE HISTORIAS CLINICAS ---
 @app.post("/historias_clinicas/", response_model=schemas.HistoriaClinica, status_code=status.HTTP_201_CREATED)
