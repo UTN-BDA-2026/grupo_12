@@ -193,8 +193,11 @@ export default function Agenda() {
   const [mostrarResultadosModal, setMostrarResultadosModal] = useState(false);
   const buscadorRef = useRef(null);
 
-  // --- NUEVO ESTADO PARA EL MODAL DE DÍA ESPECÍFICO ---
+  // --- ESTADO PARA EL MODAL DE DÍA ESPECÍFICO ---
   const [mostrarTurnosDelDia, setMostrarTurnosDelDia] = useState(null);
+
+  // --- NUEVO ESTADO PARA LAS NOTAS DEL TURNO ---
+  const [notasTurno, setNotasTurno] = useState("");
 
   const [formData, setFormData] = useState({
     medico_id: "",
@@ -303,7 +306,6 @@ export default function Agenda() {
       });
       if (response.ok) {
         setTurnoSeleccionado(null);
-        // Si estábamos viendo los turnos de un día, lo cerramos para que se actualice limpio
         if (mostrarTurnosDelDia) setMostrarTurnosDelDia(null);
         cargarDatos();
       }
@@ -312,13 +314,35 @@ export default function Agenda() {
     }
   };
 
+  // --- NUEVA LÓGICA: ACTUALIZAR ESTADO Y NOTAS ---
+  const actualizarEstadoYNotas = async (id, nuevoEstado, nuevasNotas) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/turnos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: nuevoEstado, notas: nuevasNotas }),
+      });
+      if (response.ok) {
+        setTurnoSeleccionado((prev) => ({
+          ...prev,
+          estado: nuevoEstado,
+          notas: nuevasNotas,
+        }));
+        cargarDatos();
+      } else {
+        alert("Error al actualizar el turno");
+      }
+    } catch (error) {
+      console.error("Error de conexión:", error);
+    }
+  };
+
   const estiloDeEventos = (evento) => {
-    // Si es nuestro evento agrupado de la vista Mes
     if (evento.isGroup) {
       return {
         style: {
-          backgroundColor: "#eff6ff", // Fondo azul muy clarito
-          color: "#2563eb", // Texto azul fuerte
+          backgroundColor: "#eff6ff",
+          color: "#2563eb",
           borderRadius: "8px",
           border: "1px solid #bfdbfe",
           fontWeight: "bold",
@@ -332,7 +356,6 @@ export default function Agenda() {
       };
     }
 
-    // El estilo original para los turnos individuales en vistas de Semana/Día
     return {
       style: {
         backgroundColor: "#2563eb",
@@ -367,12 +390,10 @@ export default function Agenda() {
     );
   });
 
-  // --- NUEVA LÓGICA: Agrupar eventos para Mes y superposiciones en Semana/Día ---
   const eventosParaCalendario =
     vistaActual === "month"
       ? Object.values(
           eventosFiltrados.reduce((acc, ev) => {
-            // Lógica de Mes: agrupamos TODOS los turnos por día
             const fechaString = format(ev.start, "yyyy-MM-dd");
             if (!acc[fechaString]) {
               acc[fechaString] = {
@@ -406,13 +427,10 @@ export default function Agenda() {
       : vistaActual === "week" || vistaActual === "day"
         ? Object.values(
             eventosFiltrados.reduce((acc, ev) => {
-              // Lógica Semana/Día: agrupamos SOLO si coinciden EXACTAMENTE en el mismo horario
               const timeKey = ev.start.getTime();
               if (!acc[timeKey]) {
-                // Si es el único en este horario, se muestra normal
                 acc[timeKey] = { ...ev, cantidad: 1 };
               } else {
-                // Si hay 2 o más en el mismo horario, lo transformamos en etiqueta agrupada
                 acc[timeKey].cantidad += 1;
                 acc[timeKey].isGroup = true;
                 acc[timeKey].title = `${acc[timeKey].cantidad} turnos`;
@@ -420,7 +438,7 @@ export default function Agenda() {
               return acc;
             }, {}),
           )
-        : eventosFiltrados; // La vista "Agenda" en formato lista queda intacta
+        : eventosFiltrados;
 
   const pacientesFiltradosModal = pacientes
     .filter((p) => {
@@ -444,9 +462,7 @@ export default function Agenda() {
     setMostrarResultadosModal(false);
   };
 
-  // --- LÓGICA PARA CAPTURAR EL CLIC EN UN DÍA Y MOSTRAR NUESTRO MODAL ---
   const manejarClicEnDia = (fecha) => {
-    // Filtramos todos los eventos que coincidan exactamente con este día
     const turnosDelDia = eventosFiltrados.filter((ev) =>
       isSameDay(ev.start, fecha),
     );
@@ -512,7 +528,7 @@ export default function Agenda() {
         ) : (
           <Calendar
             localizer={localizer}
-            events={eventosParaCalendario} // Usamos nuestra nueva lista agrupada
+            events={eventosParaCalendario}
             startAccessor="start"
             endAccessor="end"
             messages={mensajesEnEspanol}
@@ -523,11 +539,10 @@ export default function Agenda() {
             max={new Date(2026, 0, 1, 20, 0)}
             onSelectEvent={(evento) => {
               if (evento.isGroup) {
-                // Si tocan el cartel de "X turnos", abrimos el modal del día
                 manejarClicEnDia(evento.start);
               } else {
-                // Si tocan un turno individual (en vista semana/día), abrimos el detalle
                 setTurnoSeleccionado(evento.resource);
+                setNotasTurno(evento.resource.notas || "");
               }
             }}
             onDrillDown={manejarClicEnDia}
@@ -545,7 +560,7 @@ export default function Agenda() {
         )}
       </div>
 
-      {/* --- NUEVO MODAL FACHERO PARA LISTAR LOS TURNOS DE UN DÍA --- */}
+      {/* --- MODAL PARA LISTAR LOS TURNOS DE UN DÍA --- */}
       {mostrarTurnosDelDia && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col max-h-[85vh]">
@@ -573,13 +588,15 @@ export default function Agenda() {
             <div className="overflow-y-auto p-6 flex-1">
               {mostrarTurnosDelDia.turnos.length > 0 ? (
                 <div className="space-y-3">
-                  {/* Ordenamos los turnos de ese día por hora antes de renderizarlos */}
                   {mostrarTurnosDelDia.turnos
                     .sort((a, b) => a.start - b.start)
                     .map((ev) => (
                       <div
                         key={ev.id}
-                        onClick={() => setTurnoSeleccionado(ev.resource)}
+                        onClick={() => {
+                          setTurnoSeleccionado(ev.resource);
+                          setNotasTurno(ev.resource.notas || "");
+                        }}
                         className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
                       >
                         <div className="flex items-center gap-4">
@@ -630,7 +647,7 @@ export default function Agenda() {
         </div>
       )}
 
-      {/* --- MODAL PARA OTORGAR TURNO (IGUAL) --- */}
+      {/* --- MODAL PARA OTORGAR TURNO --- */}
       {mostrarModalAlta && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-visible">
@@ -786,11 +803,11 @@ export default function Agenda() {
         </div>
       )}
 
-      {/* --- MODAL DETALLE DEL TURNO (IGUAL) --- */}
+      {/* --- MODAL DETALLE DEL TURNO ACTUALIZADO --- */}
       {turnoSeleccionado && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50 shrink-0">
               <h3 className="text-xl font-bold text-gray-800">
                 Detalle del Turno
               </h3>
@@ -801,7 +818,8 @@ export default function Agenda() {
                 <X size={24} />
               </button>
             </div>
-            <div className="p-6 space-y-5">
+
+            <div className="p-6 space-y-5 overflow-y-auto">
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-blue-50 text-blue-600 rounded-lg mt-0.5">
                   <User size={20} />
@@ -813,6 +831,7 @@ export default function Agenda() {
                   </p>
                 </div>
               </div>
+
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg mt-0.5">
                   <Stethoscope size={20} />
@@ -826,6 +845,7 @@ export default function Agenda() {
                   </p>
                 </div>
               </div>
+
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-green-50 text-green-600 rounded-lg mt-0.5">
                   <Clock size={20} />
@@ -838,7 +858,9 @@ export default function Agenda() {
                     {format(
                       new Date(turnoSeleccionado.fecha),
                       "dd/MM/yyyy HH:mm",
-                      { locale: es },
+                      {
+                        locale: es,
+                      },
                     )}{" "}
                     hs
                   </p>
@@ -847,20 +869,107 @@ export default function Agenda() {
                   </p>
                 </div>
               </div>
-              <div className="pt-4 mt-2 border-t border-gray-100 flex gap-3">
-                <button
-                  onClick={() => setTurnoSeleccionado(null)}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
-                >
-                  Cerrar
-                </button>
-                <button
-                  onClick={() => cancelarTurno(turnoSeleccionado.id)}
-                  className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 border border-red-100 rounded-lg font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={18} /> Cancelar Turno
-                </button>
+
+              {/* NUEVO: ESTADO DEL TURNO */}
+              <div className="pt-4 border-t border-gray-100">
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Estado de la Consulta:
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() =>
+                      actualizarEstadoYNotas(
+                        turnoSeleccionado.id,
+                        "Pendiente",
+                        notasTurno,
+                      )
+                    }
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                      turnoSeleccionado.estado === "Pendiente" ||
+                      !turnoSeleccionado.estado
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    Pendiente
+                  </button>
+                  <button
+                    onClick={() =>
+                      actualizarEstadoYNotas(
+                        turnoSeleccionado.id,
+                        "Atendido",
+                        notasTurno,
+                      )
+                    }
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                      turnoSeleccionado.estado === "Atendido"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    Atendido
+                  </button>
+                  <button
+                    onClick={() =>
+                      actualizarEstadoYNotas(
+                        turnoSeleccionado.id,
+                        "Ausente",
+                        notasTurno,
+                      )
+                    }
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                      turnoSeleccionado.estado === "Ausente"
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    Ausente
+                  </button>
+                </div>
               </div>
+
+              {/* NUEVO: NOTAS */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Notas / Evolución rápida:
+                </p>
+                <textarea
+                  className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 text-sm resize-none"
+                  rows="3"
+                  placeholder="Observaciones de la consulta..."
+                  value={notasTurno}
+                  onChange={(e) => setNotasTurno(e.target.value)}
+                ></textarea>
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={() =>
+                      actualizarEstadoYNotas(
+                        turnoSeleccionado.id,
+                        turnoSeleccionado.estado || "Pendiente",
+                        notasTurno,
+                      )
+                    }
+                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 font-medium transition-colors"
+                  >
+                    Guardar Nota
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 bg-slate-50 flex gap-3 shrink-0">
+              <button
+                onClick={() => setTurnoSeleccionado(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => cancelarTurno(turnoSeleccionado.id)}
+                className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 border border-red-100 rounded-lg font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 size={18} /> Cancelar Turno
+              </button>
             </div>
           </div>
         </div>
