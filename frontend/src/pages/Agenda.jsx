@@ -192,12 +192,9 @@ export default function Agenda() {
   const [busquedaPacienteModal, setBusquedaPacienteModal] = useState("");
   const [mostrarResultadosModal, setMostrarResultadosModal] = useState(false);
   const buscadorRef = useRef(null);
-
-  // --- ESTADO PARA EL MODAL DE DÍA ESPECÍFICO ---
   const [mostrarTurnosDelDia, setMostrarTurnosDelDia] = useState(null);
-
-  // --- NUEVO ESTADO PARA LAS NOTAS DEL TURNO ---
   const [notasTurno, setNotasTurno] = useState("");
+  const [copagoTurno, setCopagoTurno] = useState(0); // NUEVO ESTADO FINANCIERO
 
   const [formData, setFormData] = useState({
     medico_id: "",
@@ -223,12 +220,11 @@ export default function Agenda() {
         const p = dataPacientes.find((pac) => pac.id === turno.paciente_id);
         const m = dataMedicos.find((med) => med.id === turno.medico_id);
         const fechaInicio = new Date(turno.fecha);
-        const fechaFin = new Date(fechaInicio.getTime() + 60 * 60 * 1000);
         return {
           id: turno.id,
           title: `${turno.motivo}`,
           start: fechaInicio,
-          end: fechaFin,
+          end: new Date(fechaInicio.getTime() + 60 * 60 * 1000),
           resource: {
             ...turno,
             paciente_nombre: p ? `${p.apellido}, ${p.nombre}` : "Desconocido",
@@ -239,7 +235,7 @@ export default function Agenda() {
       });
       setEventos(eventosFormateados);
     } catch (error) {
-      console.error("Error al cargar la agenda:", error);
+      console.error("Error al cargar:", error);
     } finally {
       setCargando(false);
     }
@@ -248,7 +244,6 @@ export default function Agenda() {
   useEffect(() => {
     cargarDatos();
   }, []);
-
   useEffect(() => {
     const handleClickFuera = (event) => {
       if (buscadorRef.current && !buscadorRef.current.contains(event.target))
@@ -260,22 +255,19 @@ export default function Agenda() {
 
   const guardarTurno = async (e) => {
     e.preventDefault();
-    if (!formData.paciente_id) {
-      alert("Por favor, buscá y seleccioná un paciente de la lista.");
-      return;
-    }
+    if (!formData.paciente_id)
+      return alert("Por favor, seleccioná un paciente de la lista.");
     const fechaFinalISO = `${formData.fecha_dia}T${formData.hora_turno}`;
-    const payload = {
-      motivo: formData.motivo,
-      fecha: fechaFinalISO,
-      medico_id: parseInt(formData.medico_id),
-      paciente_id: parseInt(formData.paciente_id),
-    };
     try {
       const response = await fetch("http://127.0.0.1:8000/turnos/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          motivo: formData.motivo,
+          fecha: fechaFinalISO,
+          medico_id: parseInt(formData.medico_id),
+          paciente_id: parseInt(formData.paciente_id),
+        }),
       });
       if (response.ok) {
         setMostrarModalAlta(false);
@@ -314,19 +306,29 @@ export default function Agenda() {
     }
   };
 
-  // --- NUEVA LÓGICA: ACTUALIZAR ESTADO Y NOTAS ---
-  const actualizarEstadoYNotas = async (id, nuevoEstado, nuevasNotas) => {
+  // ACTUALIZACIÓN DE ESTADO, NOTAS Y FINANZAS
+  const actualizarDatosTurno = async (
+    id,
+    nuevoEstado,
+    nuevasNotas,
+    nuevoCopago,
+  ) => {
     try {
       const response = await fetch(`http://127.0.0.1:8000/turnos/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: nuevoEstado, notas: nuevasNotas }),
+        body: JSON.stringify({
+          estado: nuevoEstado,
+          notas: nuevasNotas,
+          monto_copago: parseFloat(nuevoCopago) || 0,
+        }),
       });
       if (response.ok) {
         setTurnoSeleccionado((prev) => ({
           ...prev,
           estado: nuevoEstado,
           notas: nuevasNotas,
+          monto_copago: parseFloat(nuevoCopago) || 0,
         }));
         cargarDatos();
       } else {
@@ -338,7 +340,7 @@ export default function Agenda() {
   };
 
   const estiloDeEventos = (evento) => {
-    if (evento.isGroup) {
+    if (evento.isGroup)
       return {
         style: {
           backgroundColor: "#eff6ff",
@@ -351,11 +353,8 @@ export default function Agenda() {
           padding: "4px 8px",
           fontSize: "0.85rem",
           cursor: "pointer",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
         },
       };
-    }
-
     return {
       style: {
         backgroundColor: "#2563eb",
@@ -368,25 +367,16 @@ export default function Agenda() {
         marginBottom: "4px",
         fontSize: "0.85rem",
         cursor: "pointer",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
       },
     };
   };
 
   const eventosFiltrados = eventos.filter((evento) => {
     if (!busquedaGlobal) return true;
-    const nombreCompleto = evento.resource.paciente_nombre.toLowerCase();
-    const nombreInvertido = nombreCompleto
-      .split(", ")
-      .reverse()
-      .join(" ")
-      .toLowerCase();
-    const motivo = evento.title.toLowerCase();
     const termino = busquedaGlobal.toLowerCase().trim();
     return (
-      nombreCompleto.includes(termino) ||
-      nombreInvertido.includes(termino) ||
-      motivo.includes(termino)
+      evento.resource.paciente_nombre.toLowerCase().includes(termino) ||
+      evento.title.toLowerCase().includes(termino)
     );
   });
 
@@ -428,9 +418,8 @@ export default function Agenda() {
         ? Object.values(
             eventosFiltrados.reduce((acc, ev) => {
               const timeKey = ev.start.getTime();
-              if (!acc[timeKey]) {
-                acc[timeKey] = { ...ev, cantidad: 1 };
-              } else {
+              if (!acc[timeKey]) acc[timeKey] = { ...ev, cantidad: 1 };
+              else {
                 acc[timeKey].cantidad += 1;
                 acc[timeKey].isGroup = true;
                 acc[timeKey].title = `${acc[timeKey].cantidad} turnos`;
@@ -443,31 +432,13 @@ export default function Agenda() {
   const pacientesFiltradosModal = pacientes
     .filter((p) => {
       const termino = busquedaPacienteModal.toLowerCase().trim();
-      if (!termino) return true;
-      const nombreNormal = `${p.nombre} ${p.apellido}`.toLowerCase();
-      const nombreInvertido = `${p.apellido} ${p.nombre}`.toLowerCase();
       return (
-        nombreNormal.includes(termino) ||
-        nombreInvertido.includes(termino) ||
+        !termino ||
+        `${p.nombre} ${p.apellido}`.toLowerCase().includes(termino) ||
         p.dni.includes(termino)
       );
     })
     .slice(0, 8);
-
-  const seleccionarPacienteModal = (paciente) => {
-    setFormData({ ...formData, paciente_id: paciente.id });
-    setBusquedaPacienteModal(
-      `${paciente.apellido}, ${paciente.nombre} (DNI: ${paciente.dni})`,
-    );
-    setMostrarResultadosModal(false);
-  };
-
-  const manejarClicEnDia = (fecha) => {
-    const turnosDelDia = eventosFiltrados.filter((ev) =>
-      isSameDay(ev.start, fecha),
-    );
-    setMostrarTurnosDelDia({ fecha, turnos: turnosDelDia });
-  };
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col relative">
@@ -488,14 +459,14 @@ export default function Agenda() {
             <input
               type="text"
               placeholder="Buscar por paciente o motivo..."
-              className="pl-10 pr-8 py-2 w-full border border-gray-300 rounded-lg outline-none focus:border-blue-500 shadow-sm bg-white"
+              className="pl-10 pr-8 py-2 w-full border border-gray-300 rounded-lg outline-none focus:border-blue-500 bg-white"
               value={busquedaGlobal}
               onChange={(e) => setBusquedaGlobal(e.target.value)}
             />
             {busquedaGlobal && (
               <button
                 onClick={() => setBusquedaGlobal("")}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"
               >
                 <X size={16} />
               </button>
@@ -513,7 +484,7 @@ export default function Agenda() {
               setBusquedaPacienteModal("");
               setMostrarModalAlta(true);
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors whitespace-nowrap"
           >
             <Plus size={20} /> Otorgar Turno
           </button>
@@ -523,7 +494,7 @@ export default function Agenda() {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex-1 overflow-hidden">
         {cargando ? (
           <div className="h-full flex items-center justify-center text-gray-500 font-medium">
-            Sincronizando agenda con PostgreSQL...
+            Sincronizando agenda...
           </div>
         ) : (
           <Calendar
@@ -538,18 +509,31 @@ export default function Agenda() {
             min={new Date(2026, 0, 1, 8, 0)}
             max={new Date(2026, 0, 1, 20, 0)}
             onSelectEvent={(evento) => {
-              if (evento.isGroup) {
-                manejarClicEnDia(evento.start);
-              } else {
+              if (evento.isGroup)
+                setMostrarTurnosDelDia({
+                  fecha: evento.start,
+                  turnos: eventosFiltrados.filter((ev) =>
+                    isSameDay(ev.start, evento.start),
+                  ),
+                });
+              else {
                 setTurnoSeleccionado(evento.resource);
                 setNotasTurno(evento.resource.notas || "");
+                setCopagoTurno(evento.resource.monto_copago || 0);
               }
             }}
-            onDrillDown={manejarClicEnDia}
+            onDrillDown={(fecha) =>
+              setMostrarTurnosDelDia({
+                fecha,
+                turnos: eventosFiltrados.filter((ev) =>
+                  isSameDay(ev.start, fecha),
+                ),
+              })
+            }
             date={fechaActual}
-            onNavigate={(nuevaFecha) => setFechaActual(nuevaFecha)}
+            onNavigate={setFechaActual}
             view={vistaActual}
-            onView={(nuevaVista) => setVistaActual(nuevaVista)}
+            onView={setVistaActual}
             views={{
               month: true,
               week: true,
@@ -560,31 +544,25 @@ export default function Agenda() {
         )}
       </div>
 
-      {/* --- MODAL PARA LISTAR LOS TURNOS DE UN DÍA --- */}
       {mostrarTurnosDelDia && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col max-h-[85vh]">
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50 shrink-0">
               <div>
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <ListOrdered className="text-blue-600" />
-                  Turnos del{" "}
+                  <ListOrdered className="text-blue-600" /> Turnos del{" "}
                   {format(mostrarTurnosDelDia.fecha, "dd 'de' MMMM, yyyy", {
                     locale: es,
                   })}
                 </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Total programados: {mostrarTurnosDelDia.turnos.length}
-                </p>
               </div>
               <button
                 onClick={() => setMostrarTurnosDelDia(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600"
               >
                 <X size={24} />
               </button>
             </div>
-
             <div className="overflow-y-auto p-6 flex-1">
               {mostrarTurnosDelDia.turnos.length > 0 ? (
                 <div className="space-y-3">
@@ -596,27 +574,21 @@ export default function Agenda() {
                         onClick={() => {
                           setTurnoSeleccionado(ev.resource);
                           setNotasTurno(ev.resource.notas || "");
+                          setCopagoTurno(ev.resource.monto_copago || 0);
                         }}
-                        className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
+                        className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-blue-300 cursor-pointer"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border border-blue-100">
+                          <div className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg">
                             {format(ev.start, "HH:mm")} hs
                           </div>
                           <div>
                             <p className="font-bold text-slate-800">
                               {ev.resource.paciente_nombre}
                             </p>
-                            <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Stethoscope size={14} />{" "}
-                              {ev.resource.medico_nombre}
-                            </p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-1">
-                            Motivo
-                          </span>
                           <span className="text-sm text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
                             {ev.title}
                           </span>
@@ -626,28 +598,14 @@ export default function Agenda() {
                 </div>
               ) : (
                 <div className="text-center text-slate-500 py-10">
-                  <CalendarDays
-                    size={48}
-                    className="mx-auto text-slate-300 mb-4"
-                  />
-                  <p>No hay turnos agendados para este día.</p>
+                  No hay turnos agendados para este día.
                 </div>
               )}
-            </div>
-
-            <div className="p-4 border-t border-gray-100 bg-slate-50 shrink-0 text-right">
-              <button
-                onClick={() => setMostrarTurnosDelDia(null)}
-                className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition-colors"
-              >
-                Cerrar Lista
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- MODAL PARA OTORGAR TURNO --- */}
       {mostrarModalAlta && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-visible">
@@ -657,7 +615,7 @@ export default function Agenda() {
               </h3>
               <button
                 onClick={() => setMostrarModalAlta(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400"
               >
                 <X size={24} />
               </button>
@@ -670,7 +628,7 @@ export default function Agenda() {
                 <input
                   type="text"
                   required
-                  className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500 bg-white"
+                  className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
                   placeholder="Escribí DNI o apellido..."
                   value={busquedaPacienteModal}
                   onChange={(e) => {
@@ -689,14 +647,17 @@ export default function Agenda() {
                       pacientesFiltradosModal.map((p) => (
                         <li
                           key={p.id}
-                          onClick={() => seleccionarPacienteModal(p)}
-                          className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                          onClick={() => {
+                            setFormData({ ...formData, paciente_id: p.id });
+                            setBusquedaPacienteModal(
+                              `${p.apellido}, ${p.nombre}`,
+                            );
+                            setMostrarResultadosModal(false);
+                          }}
+                          className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b"
                         >
-                          <span className="font-semibold text-gray-800">
+                          <span className="font-semibold">
                             {p.apellido}, {p.nombre}
-                          </span>
-                          <span className="text-gray-500 ml-2 text-xs">
-                            DNI: {p.dni}
                           </span>
                         </li>
                       ))
@@ -714,7 +675,7 @@ export default function Agenda() {
                 </label>
                 <select
                   required
-                  className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500 bg-white"
+                  className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
                   value={formData.medico_id}
                   onChange={(e) =>
                     setFormData({ ...formData, medico_id: e.target.value })
@@ -725,7 +686,7 @@ export default function Agenda() {
                   </option>
                   {medicos.map((m) => (
                     <option key={m.id} value={m.id}>
-                      Dr/a. {m.apellido}, {m.nombre}
+                      Dr/a. {m.apellido}
                     </option>
                   ))}
                 </select>
@@ -738,7 +699,7 @@ export default function Agenda() {
                   <input
                     type="date"
                     required
-                    className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500"
+                    className="w-full border border-gray-300 rounded-lg p-2.5"
                     value={formData.fecha_dia}
                     onChange={(e) =>
                       setFormData({ ...formData, fecha_dia: e.target.value })
@@ -751,7 +712,7 @@ export default function Agenda() {
                   </label>
                   <select
                     required
-                    className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500 bg-white"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
                     value={formData.hora_turno}
                     onChange={(e) =>
                       setFormData({ ...formData, hora_turno: e.target.value })
@@ -770,13 +731,12 @@ export default function Agenda() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Motivo de la consulta
+                  Motivo
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej: Control de rutina..."
-                  className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500"
+                  className="w-full border border-gray-300 rounded-lg p-2.5"
                   value={formData.motivo}
                   onChange={(e) =>
                     setFormData({ ...formData, motivo: e.target.value })
@@ -787,15 +747,15 @@ export default function Agenda() {
                 <button
                   type="button"
                   onClick={() => setMostrarModalAlta(false)}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+                  className="flex-1 px-4 py-2.5 border rounded-lg"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg"
                 >
-                  Confirmar Turno
+                  Confirmar
                 </button>
               </div>
             </form>
@@ -803,7 +763,6 @@ export default function Agenda() {
         </div>
       )}
 
-      {/* --- MODAL DETALLE DEL TURNO ACTUALIZADO --- */}
       {turnoSeleccionado && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
@@ -813,7 +772,7 @@ export default function Agenda() {
               </h3>
               <button
                 onClick={() => setTurnoSeleccionado(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400"
               >
                 <X size={24} />
               </button>
@@ -821,152 +780,117 @@ export default function Agenda() {
 
             <div className="p-6 space-y-5 overflow-y-auto">
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg mt-0.5">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                   <User size={20} />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Paciente</p>
-                  <p className="font-semibold text-gray-800">
+                  <p className="font-semibold">
                     {turnoSeleccionado.paciente_nombre}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg mt-0.5">
-                  <Stethoscope size={20} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">
-                    Profesional Asignado
-                  </p>
-                  <p className="font-semibold text-gray-800">
-                    {turnoSeleccionado.medico_nombre}
-                  </p>
+              {/* NUEVO: FINANZAS Y FACTURACIÓN */}
+              <div className="pt-4 border-t border-gray-100">
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Facturación y Cobros:
+                </p>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">
+                      Cobertura Obra Social:
+                    </span>
+                    <span className="font-semibold text-emerald-600">
+                      ${" "}
+                      {turnoSeleccionado.monto_obra_social
+                        ? Number(
+                            turnoSeleccionado.monto_obra_social,
+                          ).toLocaleString("es-AR")
+                        : "0.00"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">
+                      Copago abonado (Efectivo/MP):
+                    </span>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1.5 text-slate-500">
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        className="pl-7 pr-3 py-1.5 w-28 text-right border border-gray-300 rounded outline-none focus:border-blue-500 text-sm font-medium"
+                        value={copagoTurno}
+                        onChange={(e) => setCopagoTurno(e.target.value)}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-green-50 text-green-600 rounded-lg mt-0.5">
-                  <Clock size={20} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">
-                    Horario y Motivo
-                  </p>
-                  <p className="font-semibold text-gray-800">
-                    {format(
-                      new Date(turnoSeleccionado.fecha),
-                      "dd/MM/yyyy HH:mm",
-                      {
-                        locale: es,
-                      },
-                    )}{" "}
-                    hs
-                  </p>
-                  <p className="text-sm text-gray-600 mt-0.5">
-                    {turnoSeleccionado.motivo}
-                  </p>
-                </div>
-              </div>
-
-              {/* NUEVO: ESTADO DEL TURNO */}
               <div className="pt-4 border-t border-gray-100">
                 <p className="text-sm font-medium text-gray-700 mb-2">
                   Estado de la Consulta:
                 </p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() =>
-                      actualizarEstadoYNotas(
-                        turnoSeleccionado.id,
-                        "Pendiente",
-                        notasTurno,
-                      )
-                    }
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                      turnoSeleccionado.estado === "Pendiente" ||
-                      !turnoSeleccionado.estado
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    Pendiente
-                  </button>
-                  <button
-                    onClick={() =>
-                      actualizarEstadoYNotas(
-                        turnoSeleccionado.id,
-                        "Atendido",
-                        notasTurno,
-                      )
-                    }
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                      turnoSeleccionado.estado === "Atendido"
-                        ? "bg-green-50 text-green-700 border-green-200"
-                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    Atendido
-                  </button>
-                  <button
-                    onClick={() =>
-                      actualizarEstadoYNotas(
-                        turnoSeleccionado.id,
-                        "Ausente",
-                        notasTurno,
-                      )
-                    }
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                      turnoSeleccionado.estado === "Ausente"
-                        ? "bg-red-50 text-red-700 border-red-200"
-                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    Ausente
-                  </button>
+                  {["Pendiente", "Atendido", "Ausente"].map((est) => (
+                    <button
+                      key={est}
+                      onClick={() =>
+                        actualizarDatosTurno(
+                          turnoSeleccionado.id,
+                          est,
+                          notasTurno,
+                          copagoTurno,
+                        )
+                      }
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${turnoSeleccionado.estado === est || (!turnoSeleccionado.estado && est === "Pendiente") ? (est === "Atendido" ? "bg-green-50 text-green-700 border-green-200" : est === "Ausente" ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200") : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                    >
+                      {est}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* NUEVO: NOTAS */}
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">
                   Notas / Evolución rápida:
                 </p>
                 <textarea
-                  className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 text-sm resize-none"
+                  className="w-full border border-gray-300 rounded-lg p-3 outline-none text-sm resize-none"
                   rows="3"
-                  placeholder="Observaciones de la consulta..."
                   value={notasTurno}
                   onChange={(e) => setNotasTurno(e.target.value)}
                 ></textarea>
                 <div className="flex justify-end mt-2">
                   <button
                     onClick={() =>
-                      actualizarEstadoYNotas(
+                      actualizarDatosTurno(
                         turnoSeleccionado.id,
                         turnoSeleccionado.estado || "Pendiente",
                         notasTurno,
+                        copagoTurno,
                       )
                     }
-                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 font-medium transition-colors"
+                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-medium"
                   >
-                    Guardar Nota
+                    Guardar Cambios
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 border-t border-gray-100 bg-slate-50 flex gap-3 shrink-0">
+            <div className="p-4 border-t bg-slate-50 flex gap-3">
               <button
                 onClick={() => setTurnoSeleccionado(null)}
-                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+                className="flex-1 px-4 py-2.5 border rounded-lg"
               >
                 Cerrar
               </button>
               <button
                 onClick={() => cancelarTurno(turnoSeleccionado.id)}
-                className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 border border-red-100 rounded-lg font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 rounded-lg flex items-center justify-center gap-2"
               >
                 <Trash2 size={18} /> Cancelar Turno
               </button>
