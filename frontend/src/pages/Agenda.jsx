@@ -189,6 +189,8 @@ export default function Agenda() {
   const [mostrarModalAlta, setMostrarModalAlta] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState(null);
   const [busquedaGlobal, setBusquedaGlobal] = useState("");
+  const [mostrarResultadosGlobal, setMostrarResultadosGlobal] = useState(false);
+  const buscadorGlobalRef = useRef(null);
   const [busquedaPacienteModal, setBusquedaPacienteModal] = useState("");
   const [mostrarResultadosModal, setMostrarResultadosModal] = useState(false);
   const buscadorRef = useRef(null);
@@ -248,6 +250,12 @@ export default function Agenda() {
     const handleClickFuera = (event) => {
       if (buscadorRef.current && !buscadorRef.current.contains(event.target))
         setMostrarResultadosModal(false);
+      // ESTO ES LO NUEVO:
+      if (
+        buscadorGlobalRef.current &&
+        !buscadorGlobalRef.current.contains(event.target)
+      )
+        setMostrarResultadosGlobal(false);
     };
     document.addEventListener("mousedown", handleClickFuera);
     return () => document.removeEventListener("mousedown", handleClickFuera);
@@ -371,13 +379,23 @@ export default function Agenda() {
     };
   };
 
+  // 1. Ahora también ignora las comas y puntos
+  const normalizarTexto = (texto) => {
+    if (!texto) return "";
+    return texto
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[,.]/g, "")
+      .toLowerCase();
+  };
+
   const eventosFiltrados = eventos.filter((evento) => {
     if (!busquedaGlobal) return true;
-    const termino = busquedaGlobal.toLowerCase().trim();
-    return (
-      evento.resource.paciente_nombre.toLowerCase().includes(termino) ||
-      evento.title.toLowerCase().includes(termino)
-    );
+    const termino = normalizarTexto(busquedaGlobal.trim());
+    const paciente = normalizarTexto(evento.resource.paciente_nombre);
+    const motivo = normalizarTexto(evento.title);
+
+    return paciente.includes(termino) || motivo.includes(termino);
   });
 
   const eventosParaCalendario =
@@ -431,10 +449,24 @@ export default function Agenda() {
 
   const pacientesFiltradosModal = pacientes
     .filter((p) => {
-      const termino = busquedaPacienteModal.toLowerCase().trim();
+      const termino = normalizarTexto(busquedaPacienteModal.trim());
+      const nombreCompleto = normalizarTexto(`${p.nombre} ${p.apellido}`);
       return (
-        !termino ||
-        `${p.nombre} ${p.apellido}`.toLowerCase().includes(termino) ||
+        !termino || nombreCompleto.includes(termino) || p.dni.includes(termino)
+      );
+    })
+    .slice(0, 8);
+
+  // ESTO ES LO NUEVO: Filtro para la barra superior
+  const pacientesFiltradosGlobal = pacientes
+    .filter((p) => {
+      if (!busquedaGlobal) return false;
+      const termino = normalizarTexto(busquedaGlobal.trim());
+      const nombreCompleto = normalizarTexto(`${p.nombre} ${p.apellido}`);
+      const nombreInverso = normalizarTexto(`${p.apellido} ${p.nombre}`);
+      return (
+        nombreCompleto.includes(termino) ||
+        nombreInverso.includes(termino) ||
         p.dni.includes(termino)
       );
     })
@@ -452,7 +484,7 @@ export default function Agenda() {
           </p>
         </div>
         <div className="flex items-center gap-4 w-full md:w-auto">
-          <div className="relative w-full md:w-72">
+          <div className="relative w-full md:w-72" ref={buscadorGlobalRef}>
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={18} className="text-gray-400" />
             </div>
@@ -461,15 +493,53 @@ export default function Agenda() {
               placeholder="Buscar por paciente o motivo..."
               className="pl-10 pr-8 py-2 w-full border border-gray-300 rounded-lg outline-none focus:border-blue-500 bg-white"
               value={busquedaGlobal}
-              onChange={(e) => setBusquedaGlobal(e.target.value)}
+              onChange={(e) => {
+                setBusquedaGlobal(e.target.value);
+                setMostrarResultadosGlobal(true);
+              }}
+              onFocus={() => {
+                if (busquedaGlobal) setMostrarResultadosGlobal(true);
+              }}
             />
             {busquedaGlobal && (
               <button
-                onClick={() => setBusquedaGlobal("")}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"
+                onClick={() => {
+                  setBusquedaGlobal("");
+                  setMostrarResultadosGlobal(false);
+                }}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
               >
                 <X size={16} />
               </button>
+            )}
+
+            {/* LA LISTA DESPLEGABLE */}
+            {mostrarResultadosGlobal && busquedaGlobal && (
+              <ul className="absolute z-50 w-full bg-white border border-gray-200 shadow-xl rounded-lg mt-1 max-h-60 overflow-y-auto">
+                {pacientesFiltradosGlobal.length > 0 ? (
+                  pacientesFiltradosGlobal.map((p) => (
+                    <li
+                      key={`global-${p.id}`}
+                      onClick={() => {
+                        setBusquedaGlobal(`${p.apellido}, ${p.nombre}`);
+                        setMostrarResultadosGlobal(false);
+                      }}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 flex flex-col"
+                    >
+                      <span className="font-semibold text-gray-800">
+                        {p.apellido}, {p.nombre}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        DNI: {p.dni}
+                      </span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="px-4 py-3 text-sm text-gray-500 text-center">
+                    No se encontraron pacientes.
+                  </li>
+                )}
+              </ul>
             )}
           </div>
           <button
