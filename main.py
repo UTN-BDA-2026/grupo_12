@@ -1,3 +1,4 @@
+import os
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session  
@@ -6,16 +7,23 @@ from app.database import engine, get_db
 from sqlalchemy import text, asc
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Cargamos las variables de entorno
+load_dotenv()
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title = "Sistema de Turnos Medicos")
+app = FastAPI(title="Sistema de Turnos Medicos")
+
+# Obtenemos la URL del frontend permitida desde el .env
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 # --- CONFIGURACION DE CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], 
+    allow_origins=[FRONTEND_URL, "http://127.0.0.1:5173"], 
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"],  
