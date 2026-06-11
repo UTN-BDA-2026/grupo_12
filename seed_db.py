@@ -13,7 +13,7 @@ fake = Faker('es_AR')
 Faker.seed(1234)
 random.seed(1234)
 
-def restaurar_base_de_datos():
+def resetear_y_poblar_db():
     print("Borrando tablas existentes para limpiar el lienzo...")
     models.Base.metadata.drop_all(bind=engine)
     print("Creando las tablas nuevamente desde cero...")
@@ -160,4 +160,4 @@ def restaurar_base_de_datos():
         db.close()
 
 if __name__ == "__main__":
-    restaurar_base_de_datos()
+    resetear_y_poblar_db()
