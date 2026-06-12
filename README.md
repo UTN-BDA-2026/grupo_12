@@ -37,12 +37,29 @@ Antes de comenzar, asegúrate de tener instalado en tu equipo:
 
 Sigue estos pasos en orden para poner el proyecto en marcha localmente.
 
-## 1. Configuración de la Base de Datos (PostgreSQL)
+## 1. Clonar el repositorio
+1. Abrir una terminal y descargar el proyecto ejecutando:
+```
+git clone https://github.com/UTN-BDA-2026/grupo_12
+```
+2. Luego de que se descarguen todas las carpeta, ejecutar:
+```
+cd grupo_12
+```
+
+## 2. Configurar las variables de entorno
+En la raíz del proyecto, crear un archivo llamado ".env" y pegar el siguiente codigo:
+```
+DATABASE_URL=postgresql://postgres:(su contraseña de postgreSQL)@localhost:5432/turnos_medicos
+FRONTEND_URL=http://localhost:5173
+```
+
+## 3. Configuración de la Base de Datos (PostgreSQL)
 1. Instala y abrí la extensión **DBCODE** en Visual Studio Code.
 2. Conecta la extensión a tu servidor local de PostgreSQL.
 3. Crea una base de datos vacía llamada exactamente `turnos_medicos`.
 
-## 2. Configuración del Backend (FastAPI)
+## 4. Configuración del Backend (FastAPI)
 El código del backend se encuentra directamente en la raíz del proyecto. Abre una terminal en la raíz y ejecuta los siguientes comandos:
 
 #### Crear el entorno virtual (Venv)
@@ -70,17 +87,17 @@ pip install fastapi uvicorn sqlalchemy psycopg2-binary pydantic
 ```
 pip install -r requirements.txt
 ```
-## 3. Poblar la base de datos
+## 5. Poblar la base de datos
 ```
 python seed_db.py
 ```
-## 4. Levantar el backend
+## 6. Levantar el backend
 ```
 uvicorn main:app --reload
 ```
 Puedes acceder a la documentación interactiva y probar los endpoints desde el Swagger UI en: http://127.0.0.1:8000/docs
 
-## 5. Configuración del frontend
+## 7. Configuración del frontend
 Abre una nueva ventana de la terminal, ubícate en la raíz del proyecto y ejecuta:
 ```
 cd frontend
