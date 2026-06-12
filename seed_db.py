@@ -2,7 +2,7 @@ import random
 import unicodedata
 import os
 from faker import Faker
-from app.database import engine, SessionLocal
+from app.db.database import engine, SessionLocal
 from app import models
 from sqlalchemy import text
 
