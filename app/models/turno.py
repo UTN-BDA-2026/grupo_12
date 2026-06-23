@@ -10,8 +10,8 @@ class Turno(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     fecha = Column(DateTime, primary_key=True)
-    medico_id = Column(Integer, ForeignKey("medicos.id"))
-    paciente_id = Column(Integer, ForeignKey("pacientes.id"))
+    medico_id = Column(Integer, ForeignKey("medicos.id"), index=True)
+    paciente_id = Column(Integer, ForeignKey("pacientes.id"), index=True)
     motivo = Column(String)
     estado = Column(String, default="Pendiente")
     notas = Column(String, nullable=True)

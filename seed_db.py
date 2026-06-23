@@ -1,3 +1,4 @@
+import datetime
 import random
 import unicodedata
 import os
@@ -17,8 +18,6 @@ def resetear_y_poblar_db():
     print("Borrando tablas existentes para limpiar el lienzo...")
     models.Base.metadata.drop_all(bind=engine)
     print("Creando las tablas nuevamente desde cero...")
-    # Al hacer create_all, SQLAlchemy ya lee tu models.py actualizado
-    # y crea las columnas financieras y la tabla de obras sociales automáticamente.
     models.Base.metadata.create_all(bind=engine)
 
     # --- Ejecutar script de particiones ---
@@ -77,7 +76,7 @@ def resetear_y_poblar_db():
     db = SessionLocal()
 
     try:
-        # --- NUEVO: CARGA DEL PADRÓN DE OBRAS SOCIALES ---
+        # --- CARGA DEL PADRÓN DE OBRAS SOCIALES ---
         print("Cargando el padrón de Obras Sociales y Prepagas...")
         obras_data = [
             {"nombre": "OSDE", "cobertura": 15000.00},
@@ -116,26 +115,21 @@ def resetear_y_poblar_db():
         # 3. Crear pacientes
         print("Recibiendo 10.000 pacientes en la sala de espera...")
 
-        # Generamos 10.000 DNIS unicos y garantizados antes del bucle
         dnis_unicos = random.sample(range(10000000, 47000000), 10000)
+        
+        # Guardaremos una pequeña muestra de pacientes para usar luego en los turnos
+        muestra_pacientes = []
 
         for i in range(10000):
-            # Guardamos los nombres generados
             nombre_generado = fake.first_name()
             apellido_generado = fake.last_name()
 
-            # Limpiamos tildes y espacios para el email
             nombre_limpio = ''.join(c for c in unicodedata.normalize('NFD', nombre_generado) if unicodedata.category(c) != 'Mn').replace(' ', '').lower()
             apellido_limpio = ''.join(c for c in unicodedata.normalize('NFD', apellido_generado) if unicodedata.category(c) != 'Mn').replace(' ', '').lower()
 
-            # Armamos el email personalizado agregando un numero random para evitar duplicados
             email_personalizado = f"{nombre_limpio}.{apellido_limpio}{random.randint(10, 999)}@example.com"
-
-            # Sacamos un DNI de nuestra lista de numeros unicos usando el indice del bucle
             dni_realista = str(dnis_unicos[i])
 
-            # --- NUEVO: ASIGNACIÓN DE COBERTURA MÉDICA ---
-            # Le damos un 70% de chance de tener obra social, y 30% de ser particular
             tiene_obra_social = random.random() < 0.7
             obra_asignada = random.choice(db_obras).id if tiene_obra_social else None
             credencial_falsa = f"{random.randint(100000, 999999)}-{random.randint(0, 9)}" if tiene_obra_social else None
@@ -150,8 +144,61 @@ def resetear_y_poblar_db():
                 numero_credencial=credencial_falsa
             )
             db.add(paciente)
+            
+            # Guardamos los primeros 300 pacientes para no agotar la RAM pero tener variedad para los turnos
+            if i < 300:
+                muestra_pacientes.append(paciente)
+                
         db.commit()
-        print("✅¡Restauración completa, la base de datos está lista para usar!")
+
+        # --- 4. NUEVO: CREAR 100 TURNOS ALEATORIOS ---
+        print("Agendando 100 turnos para poblar el calendario...")
+        
+        # Obtenemos los médicos desde la BD para asegurar que tengan su ID
+        medicos_db = db.query(models.Medico).all()
+        
+        # Mapeamos los IDs de obras sociales a su monto de cobertura para asignarlo al turno
+        mapa_coberturas = {os.id: os.cobertura_base for os in db.query(models.ObraSocial).all()}
+        
+        estados_posibles = ["Pendiente", "Completado", "Cancelado"]
+        motivos_posibles = ["Consulta de rutina", "Dolor agudo", "Lectura de estudios", "Control anual", "Renovación de recetas"]
+        
+        for _ in range(100):
+            paciente_random = random.choice(muestra_pacientes)
+            medico_random = random.choice(medicos_db)
+            estado_random = random.choice(estados_posibles)
+            
+            cobertura_turno = mapa_coberturas.get(paciente_random.obra_social_id, 0.00)
+            
+            # --- LÓGICA COMERCIAL DE HORARIOS ---
+            # 1. Generamos una fecha base aleatoria
+            fecha_base = fake.date_time_between(start_date='-30d', end_date='+60d')
+            
+            # 2. Elegimos una hora entre las 8 y las 18 
+            # (Siendo 18:30 el último turno que termina a las 19:00)
+            hora_realista = random.randint(8, 18)
+            
+            # 3. Elegimos el minuto (exactamente en punto o y media)
+            minuto_realista = random.choice([0, 30])
+            
+            # 4. "Planchamos" los segundos y microsegundos a cero, y le inyectamos nuestra hora
+            fecha_turno = fecha_base.replace(hour=hora_realista, minute=minuto_realista, second=0, microsecond=0)
+
+            turno = models.Turno(
+                fecha=fecha_turno, # <--- Pasamos nuestra fecha sanitizada
+                medico_id=medico_random.id,
+                paciente_id=paciente_random.id,
+                motivo=random.choice(motivos_posibles),
+                estado=estado_random,
+                notas=fake.sentence() if estado_random == "Completado" else None,
+                monto_obra_social=cobertura_turno,
+                monto_copago=random.choice([0.00, 2000.00, 5000.00])
+            )
+            db.add(turno)
+            
+        db.commit()
+
+        print("✅ ¡Restauración completa, la base de datos está lista para usar!")
     
     except Exception as e:
         print("Ocurrió un error durante la restauración:", e)

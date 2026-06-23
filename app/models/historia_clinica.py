@@ -11,6 +11,8 @@ class HistoriaClinica(Base):
     fecha = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     paciente_id = Column(Integer, ForeignKey("pacientes.id"))
     medico_id = Column(Integer, ForeignKey("medicos.id"))
+    # ARQUITECTURA HIBRIDA (NoSQL en relacional):
+    # Usamos JSONB porque la informacion medica no es estructurada
     datos_medicos = Column(JSONB)
     
     paciente = relationship("Paciente")

@@ -3,11 +3,13 @@ from fastapi import HTTPException, status
 from app import models, schemas
 
 def crear_turno_seguro(db: Session, turno: schemas.TurnoCreate):
-    try:
+    try: # ACA EMPIEZA LA TRANSACCION (El todo o nada)
+        
+        # --- EL BLOQUEO PESISMISTA (el candado) ---
         turno_existente = db.query(models.Turno).filter(
             models.Turno.medico_id == turno.medico_id,
             models.Turno.fecha == turno.fecha
-        ).with_for_update().first()
+        ).with_for_update().first() # Esto hace que si otro recepcionista busca esta misma fecha y medico, se quede esperando en pausa.
         
         if turno_existente:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El médico ya tiene un turno registrado.")
@@ -32,6 +34,9 @@ def crear_turno_seguro(db: Session, turno: schemas.TurnoCreate):
             paciente_id=turno.paciente_id, motivo=turno.motivo,
             monto_obra_social=cobertura 
         )
+
+        # --- EL COMMIT (exito) ---
+        # Si llegamos aca sin errores, la transaccion completa se guardo permanentemente
         db.add(nuevo_turno)
         db.commit()
         db.refresh(nuevo_turno)
@@ -40,6 +45,8 @@ def crear_turno_seguro(db: Session, turno: schemas.TurnoCreate):
     except HTTPException as http_ex:
         raise http_ex
     except Exception as e:
+        # --- EL ROLLBACK (fallo) ---
+        # Si exploto cualquier cosa, deshacemos todo para no dejar datos corruptos.
         db.rollback() 
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error transaccional: {str(e)}")
 

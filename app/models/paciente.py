@@ -4,10 +4,11 @@ from app.db.database import Base
 
 class Paciente(Base):
     __tablename__ = "pacientes"
-
+    # Acá hay B-Tree automático por ser Primary Key y explícito por index=True
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False)
     apellido = Column(String, nullable=False)
+    # Acá hay B-Tree automático por unique=True y explícito por index=True
     dni = Column(String, unique=True, index=True, nullable=False)
     email = Column(String)
     telefono = Column(String)
