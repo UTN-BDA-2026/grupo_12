@@ -48,6 +48,7 @@ def crear_turno_seguro(db: Session, turno: schemas.TurnoCreate):
         raise http_ex
     except IntegrityError:
         # --- EL ROLLBACK (violación de restricción única) ---
+        # Si la base de datos frena la inserción por el UniqueConstraint, deshacemos y avisamos.
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El médico ya tiene un turno registrado.")
     except Exception as e:
