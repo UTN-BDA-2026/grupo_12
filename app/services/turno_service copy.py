@@ -1,8 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app import models, schemas
-from sqlalchemy.exc import IntegrityError
-
 
 def crear_turno_seguro(db: Session, turno: schemas.TurnoCreate):
     try: # ACA EMPIEZA LA TRANSACCION (El todo o nada)
@@ -46,15 +44,11 @@ def crear_turno_seguro(db: Session, turno: schemas.TurnoCreate):
 
     except HTTPException as http_ex:
         raise http_ex
-    except IntegrityError:
-        # --- EL ROLLBACK (violación de restricción única) ---
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El médico ya tiene un turno registrado.")
     except Exception as e:
-        # --- EL ROLLBACK (fallo genérico) ---
+        # --- EL ROLLBACK (fallo) ---
+        # Si exploto cualquier cosa, deshacemos todo para no dejar datos corruptos.
         db.rollback() 
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error transaccional: {str(e)}")
-
 
 def obtener_turnos(db: Session):
     return db.query(models.Turno).all()

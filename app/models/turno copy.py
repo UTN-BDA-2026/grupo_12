@@ -1,11 +1,10 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 class Turno(Base):
     __tablename__ = "turnos"
-    __table_args__ = (
-        UniqueConstraint("medico_id", "fecha", name="uix_medico_fecha"),
+    table_args = (
         {"postgresql_partition_by": "RANGE (fecha)"},
     )
 
